@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Azure AI Search -MTA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+  />
+  <style>
+    body { padding: 1rem; }
+    pre { background: #0f172a; color: #e2e8f0; padding: 1rem; border-radius: .5rem; max-height: 60vh; overflow:auto; }
+    .monospace { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .caption { font-style: italic; opacity: .9; }
+    .kv label { font-size: .9rem; color: #475569; }
+  </style>
+</head>
+<body>
+  <h1 class="h3 mb-3">Azure AI Search — Metropolitan Transportation Authority (MTA)</h1>
+
+  <div class="alert alert-info py-2">
+    This uses a server-side proxy to securely handle API keys. The search endpoint and key are configured on the server.
+  </div>
+
+  <form id="searchForm" class="row g-3">
+    <!-- Endpoint and API key fields removed - now handled server-side -->
+    <div class="col-12 col-md-8">
+      <label class="form-label">search</label>
+      <input type="text" class="form-control monospace" id="q" placeholder="e.g., AWOOOOOO11166" value="AWOOOOOO11166" />
+    </div>
+
+    <div class="col-6 col-md-2">
+      <label class="form-label">top</label>
+      <input type="number" class="form-control" id="top" value="50" />
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label">skip</label>
+      <input type="number" class="form-control" id="skip" value="0" />
+    </div>
+
+    <div class="col-6 col-md-3">
+      <label class="form-label">queryType</label>
+      <select id="queryType" class="form-select">
+        <option value="semantic" selected>semantic</option>
+        <option value="simple">simple</option>
+        <option value="full">full</option>
+      </select>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <label class="form-label">semanticConfiguration</label>
+      <input type="text" class="form-control monospace" id="semanticConfig"
+        value="multimodal-rag-1749487327154-semantic-configuration" />
+    </div>
+
+    <div class="col-6 col-md-3">
+      <label class="form-label">captions</label>
+      <select id="captions" class="form-select">
+        <option value="none">none</option>
+        <option value="extractive" selected>extractive</option>
+      </select>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <label class="form-label">answers</label>
+      <input type="text" class="form-control monospace" id="answers" value="extractive|count-3" />
+    </div>
+
+    <div class="col-6 col-md-3">
+      <label class="form-label">queryLanguage</label>
+      <input type="text" class="form-control monospace" id="queryLanguage" value="en-us" />
+    </div>
+
+    <div class="col-6 col-md-3">
+      <label class="form-label">queryRewrites</label>
+      <select id="queryRewrites" class="form-select">
+        <option value="none">none</option>
+        <option value="generative" selected>generative</option>
+      </select>
+    </div>
+
+    <div class="col-12">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="useVector" checked />
+        <label class="form-check-label" for="useVector">Include vectorQueries (text-to-vector)</label>
+      </div>
+    </div>
+
+    <div class="col-12">
+      <button class="btn btn-primary" type="submit">Search</button>
+      <button class="btn btn-outline-secondary" type="button" id="nextBtn" disabled>Next page ▶</button>
+      <span id="status" class="ms-3 text-muted"></span>
+    </div>
+  </form>
+
+  <hr class="my-4"/>
+
+  <div class="row">
+    <div class="col-12 col-lg-6">
+      <h2 class="h5">Raw JSON (like the portal)</h2>
+      <pre id="rawJson" class="monospace">(results will appear here)</pre>
+    </div>
+    <div class="col-12 col-lg-6">
+      <h2 class="h5">Friendly Summary</h2>
+      <div id="summary"></div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('searchForm');
+    const nextBtn = document.getElementById('nextBtn');
+    const rawJsonEl = document.getElementById('rawJson');
+    const summaryEl = document.getElementById('summary');
+    const statusEl = document.getElementById('status');
+
+    let lastResponse = null;
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      nextBtn.disabled = true;
+      summaryEl.innerHTML = '';
+      rawJsonEl.textContent = 'Loading...';
+      statusEl.textContent = 'Sending request…';
+
+      const body = buildRequestBodyFromForm();
+      await runSearch(body);
+    });
+
+    nextBtn.addEventListener('click', async () => {
+      if (!lastResponse || !lastResponse['@search.nextPageParameters']) return;
+      const body = lastResponse['@search.nextPageParameters'];
+      statusEl.textContent = 'Paging…';
+      await runSearch(body);
+    });
+
+    function getApiVersion() {
+      // Since we're using a proxy, return a preview version that supports aiServicesVision vectorizer
+      return '2024-11-01-preview';
+    }
+
+    function supportsTextVectorQueries(apiVersion) {
+      // crude: any 2024+ preview or 2024+ GA version
+      return /2024-/.test(apiVersion);
+    }
+
+    function buildRequestBodyFromForm() {
+      const q = document.getElementById('q').value || '';
+      const top = parseInt(document.getElementById('top').value || '50', 10);
+      const skip = parseInt(document.getElementById('skip').value || '0', 10);
+      const queryType = document.getElementById('queryType').value;
+      const semanticConfiguration = document.getElementById('semanticConfig').value || undefined;
+      const captions = document.getElementById('captions').value;
+      const answers = document.getElementById('answers').value || undefined;
+      const queryLanguage = document.getElementById('queryLanguage').value || 'en-us';
+      const queryRewrites = document.getElementById('queryRewrites').value;
+      const useVector = document.getElementById('useVector').checked;
+
+      const body = {
+        search: q,
+        count: true,
+        top,
+        skip,
+        queryType,
+        queryLanguage,
+      };
+
+      if (queryType === 'semantic' && semanticConfiguration) {
+        body.semanticConfiguration = semanticConfiguration;
+      }
+      if (captions && captions !== 'none') body.captions = captions;
+      if (answers && answers !== 'none') body.answers = answers;
+      if (queryRewrites && queryRewrites !== 'none') body.queryRewrites = queryRewrites;
+
+      // Only include vectorQueries:text when API supports it
+      const apiVersion = getApiVersion();
+      if (useVector && supportsTextVectorQueries(apiVersion)) {
+        body.vectorQueries = [{
+          kind: "text",
+          fields: "content_embedding",
+          text: q
+        }];
+      }
+      // Else: omit vectorQueries to avoid 400 on 2023-11-01
+
+      return body;
+    }
+
+    async function runSearch(body) {
+      try {
+        // Use the proxy server instead of direct API calls
+        let res = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        if (res.status === 400) {
+          const clone = await res.clone().json().catch(() => null);
+          const msg = clone?.error?.message || '';
+
+          // Strip queryLanguage if rejected
+          if (/queryLanguage/i.test(msg)) {
+            const b2 = { ...body };
+            delete b2.queryLanguage;
+            res = await fetch('/api/search', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(b2)
+            });
+          }
+
+          // If still 400 and queryRewrites is the problem, strip it too
+          if (res.status === 400) {
+            const clone2 = await res.clone().json().catch(() => null);
+            const msg2 = clone2?.error?.message || '';
+            if (/queryRewrites/i.test(msg2)) {
+              const b3 = { ...body };
+              delete b3.queryLanguage;
+              delete b3.queryRewrites;
+              res = await fetch('/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(b3)
+              });
+            }
+          }
+        }
+
+        const json = await res.json();
+        lastResponse = json;
+        rawJsonEl.textContent = JSON.stringify(json, null, 2);
+        renderSummary(json);
+        statusEl.textContent = `HTTP ${res.status} • ${new Date().toLocaleTimeString()}`;
+        nextBtn.disabled = !json['@search.nextPageParameters'];
+      } catch (err) {
+        rawJsonEl.textContent = String(err);
+        summaryEl.innerHTML = '';
+        statusEl.textContent = 'Error';
+        nextBtn.disabled = true;
+      }
+    }
+
+    function renderSummary(json) {
+      const count = json['@odata.count'];
+      const answers = json['@search.answers'] || [];
+      const values = json.value || [];
+      const next = !!json['@search.nextPageParameters'];
+
+      const frag = document.createDocumentFragment();
+
+      const meta = document.createElement('div');
+      meta.className = 'kv mb-3';
+      meta.innerHTML = `
+        <div><label>Total count:</label> <strong>${count ?? '—'}</strong></div>
+        <div><label>Answers:</label> <strong>${answers.length}</strong></div>
+        <div><label>Has next page:</label> <strong>${next ? 'Yes' : 'No'}</strong></div>
+      `;
+      frag.appendChild(meta);
+
+      const list = document.createElement('div');
+      values.forEach((v, i) => {
+        const title = v.document_title || v.id || v.content_id || '(no title)';
+        const cap = (v['@search.captions'] && v['@search.captions'][0]?.text) || '';
+        const bm25 = v['@search.score'];
+        const rerank = v['@search.rerankerScore'];
+
+        const card = document.createElement('div');
+        card.className = 'border rounded p-2 mb-2';
+        card.innerHTML = `
+          <div><strong>${i + 1}. ${escapeHtml(title)}</strong></div>
+          <div class="small text-muted monospace">score=${bm25 ?? '—'} • reranker=${rerank ?? '—'}</div>
+          ${cap ? `<div class="caption mt-1">${escapeHtml(cap)}</div>` : ''}
+        `;
+        list.appendChild(card);
+      });
+
+      frag.appendChild(list);
+      summaryEl.innerHTML = '';
+      summaryEl.appendChild(frag);
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+  </script>
+</body>
+</html>

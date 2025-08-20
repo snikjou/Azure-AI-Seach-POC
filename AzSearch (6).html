@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<head>
+    <!-- Latest compiled and minified CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
+        crossorigin="anonymous">
+    <!-- Optional theme -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp"
+        crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@microsoft/azsearch.js@0.0.21/dist/AzSearch.css">
+    <title>Azure AI Search Demo App</title>
+    <style>
+        .searchResults__result h4 {
+            margin-top: 0px;
+            text-transform: uppercase;
+        }
+
+        .searchResults__result .resultDescription {
+            margin: 0.5em 0 0 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <nav class="navbar navbar-inverse navbar-fixed-top">
+            <div class="container-fluid">
+                <div class="navbar-header">
+                    <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#facetPanel" aria-expanded="false"
+                        aria-controls="navbar">
+                        <span class="sr-only">Toggle navigation</span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                    </button>
+                    <div class="row">
+                        <div class="col-md-2 pagelabel">
+                            <a class="navbar-brand pagelabel" target="_blank" href="https://portal.azure.com/#blade/HubsExtension/BrowseResourceBlade/resourceType/Microsoft.Search%2FsearchServices">Azure AI Search</a>
+                        </div>
+                        <div id="searchBox" class="col-mid-8 col-sm-8 col-xs-6">
+                            <form id="searchForm" class="navbar-form">
+                                <div class="form-group">
+                                    <input type="text" class="form-control" placeholder="Search..." style="width: 300px;">
+                                </div>
+                                <button type="submit" class="btn btn-default">Search</button>
+                            </form>
+                        </div>
+                        <div id="navbar" class="navbar-collapse collapse">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+        <div class="container-fluid">
+            <div class="row">
+                <div id="facetPanel" class="col-sm-3 col-md-3 sidebar collapse">
+                    <div id="clearFilters"></div>
+                    <ul class="nav nav-sidebar">
+                        <div className="panel panel-primary behclick-panel">
+                            
+                        </div>
+                    </ul>
+                </div>
+                <div class="col-sm-9 col-sm-offset-3 col-md-9 col-md-offset-3 results_section">
+                    <div id="results" class="row placeholders">
+                    </div>
+                    <div id="pager" class="row">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Bootstrap core JavaScript
+            ================================================== -->
+        <!-- Placed at the end of the document so the pages load faster -->
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
+            crossorigin="anonymous"></script>
+</body>
+<!-- Dependencies -->
+<script src="https://cdn.jsdelivr.net/react/15.5.0/react.min.js"></script>
+<script src="https://cdn.jsdelivr.net/react/15.5.0/react-dom.min.js"></script>
+<script type="text/javascript" src="https://cdn.jsdelivr.net/redux/3.6.0/redux.min.js"></script>
+<!-- Main -->
+<script>
+async function runSemanticSearch(q){
+  console.log("Starting search for:", q);
+  
+  const endpoint = "https://mta-ny-search2.search.windows.net/indexes/" +
+                   "multimodal-rag-1749487327154/docs/search?api-version=2023-11-01";
+  
+  // Start with a simple search first, then add semantic features
+  const body = {
+      search: q,
+      top: 10,
+      select: "*"
+  };
+
+  try {
+    const resp = await fetch(endpoint,{
+        method:"POST",
+        headers:{ 
+          "Content-Type":"application/json", 
+          "api-key":"KoZcSDd1FpmIOLfy1CnNtXNE81Sjq316T3dXJXSH7KAzSeDvIndr" 
+        },
+        body:JSON.stringify(body)
+    });
+    
+    if (!resp.ok) {
+      console.error("API response not ok:", resp.status, resp.statusText);
+      const errorText = await resp.text();
+      console.error("Error details:", errorText);
+      document.getElementById("results").innerHTML = `<div class="alert alert-danger">Search failed: ${resp.status} ${resp.statusText}<br><pre>${errorText}</pre></div>`;
+      return;
+    }
+    
+    const data = await resp.json();
+    console.log("Search response:", data);
+    renderResults(data.value);
+  } catch (error) {
+    console.error("Search error:", error);
+    document.getElementById("results").innerHTML = `<div class="alert alert-danger">Search error: ${error.message}</div>`;
+  }
+}
+
+// Alternative function with semantic search - use this once basic search works
+async function runSemanticSearchAdvanced(q){
+  console.log("Starting semantic search for:", q);
+  
+  const endpoint = "https://mta-ny-search2.search.windows.net/indexes/" +
+                   "multimodal-rag-1749487327154/docs/search?api-version=2023-11-01";
+  
+  const body = {
+      search: q,
+      queryType: "semantic",
+      semanticConfiguration: "multimodal-rag-1749487327154-semantic-configuration",
+      captions: "extractive",
+      answers: "extractive|count-3",
+      queryLanguage: "en-us",
+      top: 10,
+      select: "*"
+  };
+
+  try {
+    const resp = await fetch(endpoint,{
+        method:"POST",
+        headers:{ 
+          "Content-Type":"application/json", 
+          "api-key":"KoZcSDd1FpmIOLfy1CnNtXNE81Sjq316T3dXJXSH7KAzSeDvIndr" 
+        },
+        body:JSON.stringify(body)
+    });
+    
+    if (!resp.ok) {
+      console.error("API response not ok:", resp.status, resp.statusText);
+      const errorText = await resp.text();
+      console.error("Error details:", errorText);
+      // Fall back to basic search if semantic fails  
+      console.log("Falling back to basic search...");
+      return runSemanticSearch(q);
+    }
+    
+    const data = await resp.json();
+    console.log("Semantic search response:", data);
+    renderResults(data.value);
+  } catch (error) {
+    console.error("Semantic search error:", error);
+    // Fall back to basic search
+    console.log("Falling back to basic search...");
+    return runSemanticSearch(q);
+  }
+}
+
+function renderResults(results) {
+    console.log("Rendering results:", results);
+    const resultsContainer = document.getElementById("results");
+    resultsContainer.innerHTML = "";
+    
+    if (!results || results.length === 0) {
+        resultsContainer.innerHTML = '<div class="alert alert-info">No results found.</div>';
+        return;
+    }
+    
+    results.forEach((result, index) => {
+        console.log(`Result ${index}:`, result);
+        const resultDiv = document.createElement("div");
+        resultDiv.className = "col-xs-12 result-item";
+        resultDiv.innerHTML = `
+            <div class="row" style="margin-bottom: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px;">
+                <div class="col-xs-12 col-sm-3 col-md-3">
+                    ${result.content_id ? `<img class="img-responsive" src="${result.content_id}" alt="Result image" onerror="this.style.display='none'">` : '<div class="placeholder-img" style="background: #f0f0f0; height: 100px; display: flex; align-items: center; justify-content: center;">No Image</div>'}
+                </div>
+                <div class="col-xs-12 col-sm-9 col-md-9">
+                    <h4 style="margin-top: 0;">${result.document_title || 'No title'}</h4>
+                    <div class="resultDescription">${result.content_text || 'No description available'}</div>
+                    ${result['@search.captions'] ? `<div class="captions"><strong>Captions:</strong> ${result['@search.captions'].map(c => c.text).join('; ')}</div>` : ''}
+                </div>
+            </div>
+        `;
+        resultsContainer.appendChild(resultDiv);
+    });
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    console.log("DOM loaded, setting up event listeners");
+    
+    const searchForm = document.getElementById("searchForm");
+    if (searchForm) {
+        searchForm.addEventListener("submit", e => {
+            console.log("Form submitted");
+            e.preventDefault();
+            const input = e.target.querySelector("input[type='text']");
+            const q = input ? input.value : "";
+            console.log("Search query:", q);
+            if (q.trim()) {
+                runSemanticSearch(q.trim());
+            } else {
+                console.log("Empty query, not searching");
+            }
+        });
+        console.log("Event listener added to form");
+    } else {
+        console.error("Search form not found!");
+    }
+    
+    // Also add a test search on page load
+    setTimeout(() => {
+        console.log("Running test search...");
+        runSemanticSearch("test");
+    }, 1000);
+});
+</script>
+<style>
+</style>
+</html>

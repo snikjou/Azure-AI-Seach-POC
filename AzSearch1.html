@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<head>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css" crossorigin="anonymous">
+  <title>Azure AI Search Demo App</title>
+  <style>
+    .searchResults__result h4 { margin-top: 0; text-transform: uppercase; }
+    .searchResults__result .resultDescription { margin: .5em 0 0 0; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <nav class="navbar navbar-inverse navbar-fixed-top">
+      <div class="container-fluid">
+        <div class="navbar-header">
+          <div class="row">
+            <div class="col-md-2 pagelabel">
+              <a class="navbar-brand pagelabel" target="_blank"
+                 href="https://portal.azure.com/#blade/HubsExtension/BrowseResourceBlade/resourceType/Microsoft.Search%2FsearchServices">Azure AI Search</a>
+            </div>
+            <div id="searchBox" class="col-mid-8 col-sm-8 col-xs-6">
+              <form id="searchForm" class="navbar-form">
+                <div class="form-group">
+                  <input id="q" type="text" class="form-control" placeholder="Search..." style="width:300px;">
+                </div>
+                <button type="submit" class="btn btn-default">Search</button>
+              </form>
+            </div>
+            <div id="navbar" class="navbar-collapse collapse"></div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container-fluid" style="margin-top:70px;">
+      <div class="row">
+        <div class="col-sm-9 col-sm-offset-3 col-md-9 col-md-offset-3 results_section">
+          <div id="results" class="row placeholders"></div>
+          <div id="pager" class="row" style="margin:20px 0;"></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" crossorigin="anonymous"></script>
+  </div>
+</body>
+
+<script>
+const SEARCH_ENDPOINT =
+  "https://mta-ny-search2.search.windows.net/indexes/multimodal-rag-1749487327154/docs/search?api-version=2023-11-01";
+
+// 🔑 Use a **Query key** here for client apps
+const SEARCH_KEY = "KoZcSDd1FpmIOLfy1CnNtXNE81Sjq316T3dXJXSH7KAzSeDvIndr";
+
+let nextPageParams = null;
+let lastQuery = "";
+
+/** Build the SAME request the Azure portal uses (semantic + vector text query) */
+function buildSemanticHybridBody(q, pageParams = null) {
+  if (pageParams) {
+    // Use the continuation payload provided by @search.nextPageParameters
+    return pageParams;
+  }
+
+  return {
+    search: q,
+    queryType: "semantic",
+    semanticConfiguration: "multimodal-rag-1749487327154-semantic-configuration",
+    captions: "extractive",
+    answers: "extractive|count-3",
+    top: 10,
+    count: true,
+    select: "*" // or list the exact fields you want back
+  };
+}
+
+async function callSearch(body) {
+  const resp = await fetch(SEARCH_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "api-key": SEARCH_KEY,
+      "Accept": "application/json;odata.metadata=none"
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!resp.ok) {
+    const errorText = await resp.text();
+    throw new Error(`${resp.status} ${resp.statusText}\n${errorText}`);
+  }
+  return resp.json();
+}
+
+function renderResults(items, append=false) {
+  const results = document.getElementById("results");
+  if (!append) results.innerHTML = "";
+
+  if (!items || items.length === 0) {
+    if (!append) results.innerHTML = '<div class="alert alert-info">No results found.</div>';
+    return;
+  }
+
+  items.forEach((it) => {
+    const div = document.createElement("div");
+    div.className = "col-xs-12 result-item";
+    const caption = (it['@search.captions'] || []).map(c => c.text).join(' ');
+    div.innerHTML = `
+      <div class="row" style="margin-bottom:20px; padding:15px; border:1px solid #ddd; border-radius:5px;">
+        <div class="col-xs-12">
+          <h4 style="margin-top:0;">${it.document_title || 'Untitled document'}</h4>
+          <div class="resultDescription">${it.content_text || ''}</div>
+          ${caption ? `<div class="captions" style="margin-top:.5em;"><strong>Captions:</strong> ${caption}</div>` : ""}
+        </div>
+      </div>`;
+    results.appendChild(div);
+  });
+}
+
+function renderPager(hasNext) {
+  const pager = document.getElementById("pager");
+  pager.innerHTML = "";
+  if (!hasNext) return;
+  const btn = document.createElement("button");
+  btn.className = "btn btn-default";
+  btn.textContent = "Load more";
+  btn.onclick = () => runSearch(lastQuery, true);
+  pager.appendChild(btn);
+}
+
+async function runSearch(q, loadMore=false) {
+  try {
+    const body = buildSemanticHybridBody(q, loadMore ? nextPageParams : null);
+    const data = await callSearch(body);
+
+    // Save continuation for paging
+    nextPageParams = data['@search.nextPageParameters'] || null;
+
+    renderResults(data.value, loadMore);
+    renderPager(!!nextPageParams);
+  } catch (err) {
+    console.error(err);
+    document.getElementById("results").innerHTML =
+      `<div class="alert alert-danger">Search failed:<br><pre>${err.message}</pre></div>`;
+    document.getElementById("pager").innerHTML = "";
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const form = document.getElementById("searchForm");
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const q = document.getElementById("q").value.trim();
+    if (!q) return;
+    lastQuery = q;
+    nextPageParams = null;
+    runSearch(q, false);
+  });
+
+  // optional: run an initial query to mimic your screenshot
+  document.getElementById("q").value = "Polyurethane";
+  lastQuery = "Polyurethane";
+  runSearch("Polyurethane");
+});
+</script>
+</html>
