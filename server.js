@@ -17,8 +17,9 @@ app.use(express.json());
 // Serve static files
 app.use(express.static(__dirname));
 
-const SEARCH_ENDPOINT = 'https://mta-ny-search2.search.windows.net/indexes/multimodal-rag-1749487327154/docs/search?api-version=2024-11-01-preview';
+const SEARCH_ENDPOINT = process.env.SEARCH_ENDPOINT;
 const SEARCH_KEY = process.env.SEARCH_QUERY_KEY; // set in env
+const SEMANTIC_CONFIGURATION = process.env.SEMANTIC_CONFIGURATION;
 
 app.post('/api/search', async (req, res) => {
   try {
@@ -32,6 +33,13 @@ app.post('/api/search', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
+});
+
+// Serve configuration values to frontend
+app.get('/api/config', (req, res) => {
+  res.json({
+    semanticConfiguration: SEMANTIC_CONFIGURATION
+  });
 });
 
 // Serve the main HTML file at root

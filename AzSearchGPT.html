@@ -32,7 +32,7 @@
 
     <div class="col-6 col-md-2">
       <label class="form-label">top</label>
-      <input type="number" class="form-control" id="top" value="50" />
+      <input type="number" class="form-control" id="top" value="10" />
     </div>
     <div class="col-6 col-md-2">
       <label class="form-label">skip</label>
@@ -51,7 +51,7 @@
     <div class="col-6 col-md-3">
       <label class="form-label">semanticConfiguration</label>
       <input type="text" class="form-control monospace" id="semanticConfig"
-        value="multimodal-rag-1749487327154-semantic-configuration" />
+        value="" />
     </div>
 
     <div class="col-6 col-md-3">
@@ -97,11 +97,17 @@
   <hr class="my-4"/>
 
   <div class="row">
-    <div class="col-12 col-lg-6">
+    <div class="col-12 col-lg-4">
+      <h2 class="h5">PDF Files Found in the Query response</h2>
+      <div id="pdfList" class="border rounded p-2" style="max-height: 300px; overflow-y: auto;">
+        <div class="text-muted">(PDF files will appear here)</div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
       <h2 class="h5">Raw JSON (like the portal)</h2>
       <pre id="rawJson" class="monospace">(results will appear here)</pre>
     </div>
-    <div class="col-12 col-lg-6">
+    <div class="col-12 col-lg-4">
       <h2 class="h5">Friendly Summary</h2>
       <div id="summary"></div>
     </div>
@@ -113,13 +119,29 @@
     const rawJsonEl = document.getElementById('rawJson');
     const summaryEl = document.getElementById('summary');
     const statusEl = document.getElementById('status');
+    const pdfListEl = document.getElementById('pdfList');
 
     let lastResponse = null;
+
+    // Load configuration from server
+    async function loadConfig() {
+      try {
+        const response = await fetch('/api/config');
+        const config = await response.json();
+        document.getElementById('semanticConfig').value = config.semanticConfiguration || '';
+      } catch (error) {
+        console.error('Failed to load configuration:', error);
+      }
+    }
+
+    // Load config when page loads
+    loadConfig();
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       nextBtn.disabled = true;
       summaryEl.innerHTML = '';
+      pdfListEl.innerHTML = '<div class="text-muted">Loading...</div>';
       rawJsonEl.textContent = 'Loading...';
       statusEl.textContent = 'Sending request…';
 
@@ -229,13 +251,26 @@
 
         const json = await res.json();
         lastResponse = json;
-        rawJsonEl.textContent = JSON.stringify(json, null, 2);
+        
+        // Create a cleaned version for display (remove content_embedding fields)
+        const cleanedJson = JSON.parse(JSON.stringify(json));
+        if (cleanedJson.value) {
+          cleanedJson.value.forEach(item => {
+            if (item.content_embedding) {
+              delete item.content_embedding;
+            }
+          });
+        }
+        
+        rawJsonEl.textContent = JSON.stringify(cleanedJson, null, 2);
         renderSummary(json);
+        renderPdfList(json);
         statusEl.textContent = `HTTP ${res.status} • ${new Date().toLocaleTimeString()}`;
         nextBtn.disabled = !json['@search.nextPageParameters'];
       } catch (err) {
         rawJsonEl.textContent = String(err);
         summaryEl.innerHTML = '';
+        pdfListEl.innerHTML = '<div class="text-muted">Error loading results</div>';
         statusEl.textContent = 'Error';
         nextBtn.disabled = true;
       }
@@ -278,6 +313,66 @@
       frag.appendChild(list);
       summaryEl.innerHTML = '';
       summaryEl.appendChild(frag);
+    }
+
+    function renderPdfList(json) {
+      const values = json.value || [];
+      const pdfFiles = new Set(); // Use Set to avoid duplicates
+      
+      // Extract PDF file names from various possible fields
+      values.forEach(item => {
+        // Check common fields that might contain PDF file names
+        const possibleFields = [
+          item.document_title,
+          item.title,
+          item.filename,
+          item.source,
+          item.file_name,
+          item.document_name,
+          item.name,
+          item.id
+        ];
+        
+        possibleFields.forEach(field => {
+          if (field && typeof field === 'string') {
+            // Check if the field contains .pdf or looks like a PDF filename
+            if (field.toLowerCase().includes('.pdf') || 
+                field.toLowerCase().endsWith('.pdf') ||
+                (field.toLowerCase().includes('pdf') && field.includes('.'))) {
+              // Extract just the filename if it's a full path
+              const filename = field.split('/').pop().split('\\').pop();
+              if (filename.toLowerCase().includes('.pdf')) {
+                pdfFiles.add(filename);
+              }
+            }
+          }
+        });
+      });
+
+      // Render the PDF list
+      const frag = document.createDocumentFragment();
+      
+      if (pdfFiles.size === 0) {
+        const noFiles = document.createElement('div');
+        noFiles.className = 'text-muted';
+        noFiles.textContent = 'No PDF files found in results';
+        frag.appendChild(noFiles);
+      } else {
+        const count = document.createElement('div');
+        count.className = 'mb-2 fw-bold';
+        count.textContent = `Found ${pdfFiles.size} unique PDF file(s):`;
+        frag.appendChild(count);
+
+        Array.from(pdfFiles).sort().forEach(pdfFile => {
+          const item = document.createElement('div');
+          item.className = 'border-bottom py-1 small';
+          item.innerHTML = `📄 ${escapeHtml(pdfFile)}`;
+          frag.appendChild(item);
+        });
+      }
+      
+      pdfListEl.innerHTML = '';
+      pdfListEl.appendChild(frag);
     }
 
     function escapeHtml(s) {
