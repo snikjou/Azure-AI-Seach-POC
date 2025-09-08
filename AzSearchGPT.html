@@ -211,8 +211,8 @@
       if (queryType === 'semantic' && semanticConfiguration) {
         body.semanticConfiguration = semanticConfiguration;
       }
-      if (captions && captions !== 'none') body.captions = captions;
-      if (answers && answers !== 'none') body.answers = answers;
+      if (queryType === 'semantic' && captions && captions !== 'none') body.captions = captions;
+      if (queryType === 'semantic' && answers && answers !== 'none') body.answers = answers;
       if (queryRewrites && queryRewrites !== 'none') body.queryRewrites = queryRewrites;
 
       // Only include vectorQueries:text when API supports it
