@@ -47,4 +47,5 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'AzSearchGPT.html'));
 });
 
-app.listen(3001, () => console.log('Server running on http://localhost:3001 - Open in browser to test Azure AI Search'));
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => console.log(`Server running on port ${PORT} - Open in browser to test Azure AI Search`));
