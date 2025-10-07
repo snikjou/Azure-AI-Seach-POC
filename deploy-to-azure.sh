@@ -36,11 +36,11 @@ while [ -z "$APP_NAME" ]; do
     read -p "Web App name cannot be empty. Please enter a unique name: " APP_NAME
 done
 
-read -p "Enter Azure region (or press Enter for 'eastus'): " LOCATION
-LOCATION=${LOCATION:-eastus}
+read -p "Enter Azure region (or press Enter for 'eastus2'): " LOCATION
+LOCATION=${LOCATION:-eastus2}
 
-read -p "Enter App Service SKU (or press Enter for 'B1'): " SKU
-SKU=${SKU:-B1}
+read -p "Enter App Service SKU (or press Enter for 'B3'): " SKU
+SKU=${SKU:-B3}
 
 # Get environment variables
 echo -e "\n${YELLOW}Enter your Azure AI Search configuration:${NC}"
@@ -58,7 +58,7 @@ az appservice plan create --name "$APP_PLAN" --resource-group "$RESOURCE_GROUP" 
 
 # Create Web App
 echo -e "\n${YELLOW}Creating Web App...${NC}"
-az webapp create --resource-group "$RESOURCE_GROUP" --plan "$APP_PLAN" --name "$APP_NAME" --runtime "NODE:18-lts"
+az webapp create --resource-group "$RESOURCE_GROUP" --plan "$APP_PLAN" --name "$APP_NAME" --runtime "NODE:20-lts"
 
 # Configure environment variables
 echo -e "\n${YELLOW}Configuring environment variables...${NC}"
