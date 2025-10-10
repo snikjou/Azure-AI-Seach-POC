@@ -47,6 +47,7 @@ echo -e "\n${YELLOW}Enter your Azure AI Search configuration:${NC}"
 read -p "SEARCH_QUERY_KEY: " SEARCH_QUERY_KEY
 read -p "SEARCH_ENDPOINT: " SEARCH_ENDPOINT
 read -p "SEMANTIC_CONFIGURATION: " SEMANTIC_CONFIGURATION
+read -p "STORAGE_ACCOUNT_URL: " STORAGE_ACCOUNT_URL
 
 # Create Resource Group
 echo -e "\n${YELLOW}Creating resource group...${NC}"
@@ -65,7 +66,8 @@ echo -e "\n${YELLOW}Configuring environment variables...${NC}"
 az webapp config appsettings set --resource-group "$RESOURCE_GROUP" --name "$APP_NAME" --settings \
   SEARCH_QUERY_KEY="$SEARCH_QUERY_KEY" \
   SEARCH_ENDPOINT="$SEARCH_ENDPOINT" \
-  SEMANTIC_CONFIGURATION="$SEMANTIC_CONFIGURATION"
+  SEMANTIC_CONFIGURATION="$SEMANTIC_CONFIGURATION" \
+  STORAGE_ACCOUNT_URL="$STORAGE_ACCOUNT_URL"
 
 # Enable HTTPS only
 echo -e "\n${YELLOW}Enabling HTTPS only...${NC}"
