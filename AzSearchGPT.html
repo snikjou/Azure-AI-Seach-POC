@@ -29,7 +29,7 @@
 
     <div class="col-6 col-md-2">
       <label class="form-label">top</label>
-      <input type="number" class="form-control" id="top" value="10" />
+      <input type="number" class="form-control" id="top" value="100" />
     </div>
 
     <div class="col-6 col-md-3">
@@ -83,14 +83,7 @@
   <hr class="my-4"/>
 
   <div class="row">
-    <div class="col-12 col-lg-6">
-      <h2 class="h5">PDF Files Found in the Query response</h2>
-      <div id="pdfList" class="border rounded p-2" style="max-height: 300px; overflow-y: auto;">
-        <div class="text-muted">(PDF files will appear here)</div>
-        
-      </div>
-    </div>
-    <div class="col-12 col-lg-6">
+    <div class="col-12">
       <h2 class="h5">Search Summary</h2>
       <div id="summary"></div>
     </div>
@@ -101,7 +94,6 @@
     const nextBtn = document.getElementById('nextBtn');
     const summaryEl = document.getElementById('summary');
     const statusEl = document.getElementById('status');
-    const pdfListEl = document.getElementById('pdfList');
 
     let lastResponse = null;
     let storageAccountUrl = '';
@@ -124,7 +116,6 @@
       e.preventDefault();
       nextBtn.disabled = true;
       summaryEl.innerHTML = '';
-      pdfListEl.innerHTML = '<div class="text-muted">Loading...</div>';
       statusEl.textContent = 'Sending request…';
 
       const body = buildRequestBodyFromForm();
@@ -231,12 +222,10 @@
         lastResponse = json;
         
         renderSummary(json);
-        renderPdfList(json);
         statusEl.textContent = `HTTP ${res.status} • ${new Date().toLocaleTimeString()}`;
         nextBtn.disabled = !json['@search.nextPageParameters'];
       } catch (err) {
         summaryEl.innerHTML = '';
-        pdfListEl.innerHTML = '<div class="text-muted">Error loading results</div>';
         statusEl.textContent = 'Error';
         nextBtn.disabled = true;
       }
@@ -253,7 +242,6 @@
       const meta = document.createElement('div');
       meta.className = 'kv mb-3';
       meta.innerHTML = `
-        <div><label>Total count:</label> <strong>${count ?? '—'}</strong></div>
         <div><label>Answers:</label> <strong>${answers.length}</strong></div>
         <div><label>Has next page:</label> <strong>${next ? 'Yes' : 'No'}</strong></div>
       `;
@@ -289,90 +277,6 @@
       frag.appendChild(list);
       summaryEl.innerHTML = '';
       summaryEl.appendChild(frag);
-    }
-
-    function renderPdfList(json) {
-      const values = json.value || [];
-      const pdfFiles = new Map(); // Map to store filename -> item.filename mapping
-      
-      // Extract PDF file names, prioritizing item.filename
-      values.forEach(item => {
-        // First, check if item.filename exists and is a PDF
-        if (item.filename && typeof item.filename === 'string' && 
-            item.filename.toLowerCase().includes('.pdf')) {
-          const filename = item.filename.split('/').pop().split('\\').pop();
-          // Store the original item.filename for URL construction
-          pdfFiles.set(filename, item.filename);
-        } else {
-          // Fallback: Check other common fields that might contain PDF file names
-          const possibleFields = [
-            item.document_title,
-            item.title,
-            item.source,
-            item.file_name,
-            item.document_name,
-            item.name,
-            item.id
-          ];
-          
-          for (const field of possibleFields) {
-            if (field && typeof field === 'string') {
-              // Check if the field contains .pdf or looks like a PDF filename
-              if (field.toLowerCase().includes('.pdf') || 
-                  field.toLowerCase().endsWith('.pdf') ||
-                  (field.toLowerCase().includes('pdf') && field.includes('.'))) {
-                // Extract just the filename if it's a full path
-                const filename = field.split('/').pop().split('\\').pop();
-                if (filename.toLowerCase().includes('.pdf')) {
-                  // Store with the field value as the path
-                  if (!pdfFiles.has(filename)) {
-                    pdfFiles.set(filename, field);
-                  }
-                  break;
-                }
-              }
-            }
-          }
-        }
-      });
-
-      // Render the PDF list
-      const frag = document.createDocumentFragment();
-      
-      if (pdfFiles.size === 0) {
-        const noFiles = document.createElement('div');
-        noFiles.className = 'text-muted';
-        noFiles.textContent = 'No PDF files found in results';
-        frag.appendChild(noFiles);
-      } else {
-        const count = document.createElement('div');
-        count.className = 'mb-2 fw-bold';
-        count.textContent = `Found ${pdfFiles.size} unique PDF file(s):`;
-        frag.appendChild(count);
-
-        Array.from(pdfFiles.keys()).sort().forEach(displayName => {
-          const itemPath = pdfFiles.get(displayName);
-          const item = document.createElement('div');
-          item.className = 'border-bottom py-1 small';
-          
-          // Generate the Azure Storage URL if storageAccountUrl is configured
-          if (storageAccountUrl) {
-            // Ensure the storage URL ends with a slash
-            const baseUrl = storageAccountUrl.endsWith('/') ? storageAccountUrl : storageAccountUrl + '/';
-            // Use the original item.filename (itemPath) for the URL
-            const fileUrl = baseUrl + encodeURIComponent(itemPath);
-            item.innerHTML = `📄 <a href="${escapeHtml(fileUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(displayName)}</a>`;
-          } else {
-            // If no storage URL configured, just show the filename
-            item.innerHTML = `📄 ${escapeHtml(displayName)}`;
-          }
-          
-          frag.appendChild(item);
-        });
-      }
-      
-      pdfListEl.innerHTML = '';
-      pdfListEl.appendChild(frag);
     }
 
     function escapeHtml(s) {
