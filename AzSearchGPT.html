@@ -254,15 +254,10 @@
         const bm25 = v['@search.score'];
         const rerank = v['@search.rerankerScore'];
 
-        // Generate clickable link for PDF documents if storageAccountUrl is available
-        let titleHtml = '';
-        if (storageAccountUrl && title.toLowerCase().includes('.pdf')) {
-          const baseUrl = storageAccountUrl.endsWith('/') ? storageAccountUrl : storageAccountUrl + '/';
-          const fileUrl = baseUrl + encodeURIComponent(title);
-          titleHtml = `<strong>${i + 1}. <a href="${escapeHtml(fileUrl)}" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: underline;">${escapeHtml(title)}</a></strong>`;
-        } else {
-          titleHtml = `<strong>${i + 1}. ${escapeHtml(title)}</strong>`;
-        }
+        // Generate clickable link for all documents
+        const baseUrl = storageAccountUrl.endsWith('/') ? storageAccountUrl : storageAccountUrl + '/';
+        const fileUrl = baseUrl + encodeURIComponent(title);
+        const titleHtml = `<strong>${i + 1}. <a href="${escapeHtml(fileUrl)}" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: underline;">${escapeHtml(title)}</a></strong>`;
 
         const card = document.createElement('div');
         card.className = 'border rounded p-2 mb-2';
